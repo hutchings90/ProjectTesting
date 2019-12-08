@@ -1,0 +1,422 @@
+<!DOCTYPE html>
+<head>
+	<link rel="stylesheet" type="text/css" href="style.css"/>
+
+	<script src='js/vue.js'></script>
+	<script src='js/report.js'></script>
+	<script src='js/reports.js'></script>
+	<script src='js/profileForm.js'></script>
+	<script src='js/adminForm.js'></script>
+	<script src='js/newRecording.js'></script>
+	<script src='js/newRecordingResult.js'></script>
+	<script src='js/recording.js'></script>
+	<script src='js/recordings.js'></script>
+	<script src='js/Request.js'></script>
+	<script src='js/XHR.js'></script>
+	<script src='js/SpeechTherapyRequester.js'></script>
+	<script src='js/UpSigner.js'></script>
+	<script src='js/OutSigner.js'></script>
+	<script src='js/InSigner.js'></script>
+	<script src='js/SignInHelper.js'></script>
+	<script src='js/ProfileUpdater.js'></script>
+	<script src='js/SpeechToText.js'></script>
+	<script src='js/DemoSpeechAnalyzer.js'></script>
+	<script src='js/MicrosoftCognitiveServices.js'></script>
+	<script src='js/NewRecordingInterpreter.js'></script>
+	<script src='js/RecordingUploader.js'></script>
+	<script src='js/NewTextSamplesGetter.js'></script>
+	<script src='js/RecordingsGetter.js'></script>
+	<script src='js/TextSamplesImporter.js'></script>
+
+	<title>Automated Speech Therapy</title>
+</head>
+
+<body>
+	<div id='speech-therapy-app'>
+		<reports :reports='reports'></reports>
+
+		<div id='banner'>
+			<strong>Automated Speech Therapy</strong>
+			<ul v-if='signedIn' id='tab-headers'>
+				<li @click='activateTab("newRecording")' :class='headerClass("newRecording")'>New Recording</li>
+				<li @click='activateResultsHistoryTab' :class='resultsHistoryClass'>Results History (<span v-html='recordingCount'></span>)</li>
+				<li @click='activateTab("profile")' :class='headerClass("profile")'>Profile</li>
+			</ul>
+		</div>
+
+		<div id='tab-content'>
+			<template v-if='signedIn'>
+				<new-recording
+					v-show='activeTab == "newRecording"'
+					@get-new-text-samples='getNewTextSamples'
+					@recording-begun='recordingBegun'
+					@new-recording='handleNewRecording'
+					:active='activeTab == "newRecording"'
+					:getting-text-samples='gettingTextSamples'
+					:processing='processingNewRecording'
+					:text-samples='textSamples'
+					:results='newRecordingResults'></new-recording>
+				<recordings
+					v-show='activeTab == "resultsHistory"'
+					@get-recordings='getRecordings'
+					:recordings='recordings'
+					:recording-count='recordingCount'
+					:shared-data='sharedRecordingsData'></recordings>
+				<profile-form
+					v-show='activeTab == "profile"'
+					@update-attr='updateUser'
+					@right-extra-clicked='signOut'
+					:user='user'
+					:processing='signingOut'
+					:show-password='true'
+					:show-email='true'
+					:right-extra='"Sign Out"'></profile-form>
+				<div v-if='user.is_superuser' class='admin-wrapper'>
+					<admin-form
+						v-show='activeTab == "profile"'
+						@import-text-samples='importTextSamples'
+						:importing-text-samples='importingTextSamples'></admin-form>
+				</div>
+			</template>
+			<template v-else>
+				<profile-form
+					v-show='activeTab == "signUp"'
+					@submit='signUp'
+					@right-extra-clicked='activateTab("signIn")'
+					:user='user'
+					:processing='signingUp'
+					:submit-text='"Sign Up"'
+					:show-password='true'
+					:show-email='true'
+					:right-extra='"Back"'></profile-form>
+				<profile-form
+					v-show='activeTab == "signIn"'
+					@submit='signIn'
+					@right-extra-clicked='activateTab("signUp")'
+					@left-extra-clicked='getSignInHelp'
+					:user='user'
+					:processing='signingIn'
+					:submit-text='"Sign In"'
+					:show-password='true'
+					:left-extra='"Need help signing in?"'
+					:right-extra='"Sign up"'></profile-form>
+				<profile-form
+					v-show='activeTab == "signInHelp"'
+					@submit='sendSignInHelpEmail'
+					@right-extra-clicked='endSignInHelp'
+					:user='user'
+					:processing='sendingSignInHelpEmail'
+					:submit-text='"Submit"'
+					:right-extra='"Cancel"'
+					:notes='"If the username is found, an email will be sent to the associated email address with a temporary password."'></profile-form>
+			</template>
+		</div>
+	</div>
+
+	<script>
+	let vue = new Vue({
+		el: '#speech-therapy-app',
+		data: {
+			user: {
+				id: 0,
+				username: '',
+				password: '',
+				email: '',
+				is_superuser: true
+			},
+			recordings: [],
+			recordingCount: 0,
+			textSamples: [],
+			activeTab: 'signIn',
+			signingIn: false,
+			signingUp: false,
+			signingOut: false,
+			updatingProfile: false,
+			gettingTextSamples: false,
+			lastGetTextSamplesTs: null,
+			pageNumberAfterGetRecordings: 1,
+			sharedRecordingsData: {
+				recordingsPerPage: 10
+			},
+			lastGetRecordingsTs: null,
+			interpretingRecording: false,
+			newRecordingTs: null,
+			uploadingNewRecording: false,
+			importingTextSamples: false,
+			interpretation: '',
+			score: -1,
+			reports: [],
+			sendingSignInHelpEmail: false,
+			newRecordingResults: [],
+		},
+		created: function() {
+			this.initXHRs();
+			this.initNewRecordingInterpreter();
+			this.updateCSRFToken('{{ csrfToken }}');
+		},
+		computed: {
+			signedIn: function() { return this.user.id; },
+			hasRecordings: function() { return this.recordingCount > 0; },
+			processingNewRecording: function() { return this.interpretingRecording || this.uploadingNewRecording; },
+			resultsHistoryClass: function() {
+				let resultsHistoryClass = this.headerClass("resultsHistory");
+				resultsHistoryClass.disabled = !this.hasRecordings;
+				return resultsHistoryClass;
+			},
+			maxTextSampleId: function() { return Math.max(...this.textSamples.map(textSample => textSample.id)); }
+		},
+		methods: {
+			initXHRs: function() {
+				this.xhrs = {};
+				this.addXHR('upSigner', new UpSigner({
+					url: 'signUp',
+					onSuccess: (response) => this.onSignUpSuccess(response),
+					onError: (response, status) => this.addError(response),
+					onComplete: () => this.signingUp = false
+				}));
+				this.addXHR('outSigner', new OutSigner({
+					url: 'signOut',
+					onSuccess: (response) => this.onSignOutSuccess(response),
+					onError: (response, status) => this.addError(response),
+					onComplete: () => this.signingOut = false
+				}));
+				this.addXHR('inSigner', new InSigner({
+					url: 'signIn',
+					onSuccess: (response) => this.onSignInSuccess(response),
+					onError: (response, status) => this.addError(response),
+					onComplete: () => this.signingIn = false
+				}));
+				this.addXHR('signInHelper', new SignInHelper({
+					url: 'sendSignInHelpEmail',
+					onSuccess: (response) => this.onSignInHelpSuccess(response),
+					onError: (response, status) => this.addError(response),
+					onComplete: () => this.sendingSignInHelpEmail = false
+				}));
+				this.addXHR('profileUpdater', new ProfileUpdater({
+					url: 'updateUser',
+					onSuccess: (response) => this.onUpdateUserSuccess(response),
+					onError: (response, status) => this.addError(response),
+					onComplete: () => this.updatingUser = false
+				}));
+				this.addXHR('recordingUploader', new RecordingUploader({
+					url: 'newRecording',
+					onSuccess: (response) => this.onNewRecordingSuccess(response),
+					onError: (response, status) => this.addError(response),
+					onComplete: () => this.uploadingNewRecording = false
+				}));
+				this.addXHR('newTextSamplesGetter', new NewTextSamplesGetter({
+					url: 'getTextSamples',
+					onSuccess: (response) => this.onGetNewTextSampleSuccess(response),
+					onError: (response, status) => this.addError(response),
+					onComplete: () => this.gettingTextSamples = false
+				}));
+				this.addXHR('recordingsGetter', new RecordingsGetter({
+					url: 'getRecordings',
+					onSuccess: (response) => this.onGetRecordingSuccess(response),
+					onError: (response, status) => this.addError(response),
+					onComplete: () => this.gettingRecordings = false
+				}));
+				this.addXHR('textSamplesImporter', new TextSamplesImporter({
+					url: 'importTextSamples',
+					onSuccess: (response) => this.onTextSamplesImportSuccess(response),
+					onError: (response, status) => this.addError(response),
+					onComplete: () => this.importingTextSamples = false
+				}));
+			},
+			initNewRecordingInterpreter: function() {
+				this.newRecordingInterpreter = new NewRecordingInterpreter('demoSpeechAnalyzer', {
+					onSuccess: (newRecordingResultsIndex, data) => this.handleRecordingInterpretation(newRecordingResultsIndex, data),
+					onError: (newRecordingResultsIndex, response, status) => this.addError(newRecordingResultsIndex, response),
+					onComplete: (newRecordingResultsIndex, response) => this.interpretingRecording = false
+				});
+				this.newRecordingInterpreter.names.forEach(name => this.newRecordingResults.push({
+					name: name,
+					interpretation: '',
+					score: -1
+				}));
+			},
+			headerClass: function(tab) {
+				return {
+					active: tab == this.activeTab
+				};
+			},
+			activateTab: function(tab) {
+				this.activeTab = tab;
+			},
+			activateResultsHistoryTab: function() {
+				if (!this.hasRecordings) return;
+				this.activateTab("resultsHistory");
+			},
+			signUp: function() {
+				this.signingUp = true;
+				this.xhrs.upSigner.submit(this.user);
+			},
+			signIn: function() {
+				this.signingIn = true;
+				this.xhrs.inSigner.submit(this.user.username, this.user.password);
+			},
+			getSignInHelp: function() {
+				this.activeTab = 'signInHelp';
+			},
+			sendSignInHelpEmail: function() {
+				this.sendingSignInHelpEmail = true;
+				this.xhrs.signInHelper.submit(this.user.username);
+			},
+			onSignInHelpSuccess: function(response) {
+				this.addSuccess('Email sent.');
+				this.endSignInHelp();
+			},
+			endSignInHelp: function() {
+				this.activeTab = 'signIn';
+				this.sendingSignInHelpEmail = false;
+			},
+			signOut: function() {
+				this.signingOut = true;
+				this.xhrs.outSigner.submit();
+			},
+			getNewTextSamples: function() {
+				this.gettingTextSamples = true;
+				this.updateTs('lastGetTextSamplesTs');
+				this.xhrs.newTextSamplesGetter.submit(this.maxTextSampleId, this.lastGetTextSamplesTs);
+			},
+			getRecordings: function(data) {
+				this.gettingRecordings = true;
+				this.updateTs('lastGetRecordingsTs');
+				this.xhrs.recordingsGetter.submit(data.page, this.sharedRecordingsData.recordingsPerPage, data.pageNumberAfterGetRecordings, this.lastGetRecordingsTs);
+			},
+			updateUser: function(attr) {
+				this.updatingUser = true;
+				this.xhrs.profileUpdater.submit(attr, this.user[attr]);
+			},
+			importTextSamples: function(file) {
+				this.importingTextSamples = true;
+				this.updateTs('lastGetTextSamplesTs');
+				this.xhrs.textSamplesImporter.submit(this.lastGetTextSamplesTs, file);
+			},
+			recordingBegun: function() {
+				this.newRecordingResults.forEach(result => {
+					result.interpretation = '',
+					result.score = -1
+				});
+			},
+			handleNewRecording: function(data) {
+				this.interpretingRecording = true;
+				this.updateTs('newRecordingTs');
+				this.newRecordingResults.forEach(result => {
+					result.interpretation = '';
+					result.score = -1;
+				});
+				data.ts = this.newRecordingTs;
+				this.newRecordingInterpreter.submit(data);
+			},
+			handleRecordingInterpretation: function(i, data) {
+				this.saveNewRecording(i, data);
+
+				if (data.ts < this.newRecordingTs) return;
+				this.newRecordingResults[i].interpretation = data.interpretation;
+			},
+			saveNewRecording: function(i, data) {
+				this.uploadingNewRecording = true;
+				this.updateTs('lastGetRecordingsTs');
+				this.xhrs.recordingUploader.submit(i, this.sharedRecordingsData.recordingsPerPage, this.lastGetRecordingsTs, data);
+			},
+			addXHR: function(key, xhr) {
+				this.xhrs[key] = xhr;
+			},
+			updateCSRFToken: function(csrfToken) {
+				for (let key in this.xhrs) {
+					this.xhrs[key].updateCSRFToken(csrfToken);
+				}
+				this.newRecordingInterpreter.updateCSRFToken(csrfToken);
+			},
+			onSignUpSuccess: function(response) {
+				if (response.errors) {
+					this.addError(response.errors.join('<br>'));
+					return;
+				}
+
+				this.user = response.user;
+				this.recordings = response.recordings;
+				this.recordingCount = response.recordingCount;
+				this.textSamples = response.textSamples;
+				this.updateCSRFToken(response.csrfToken);
+				this.activateTab('newRecording');
+			},
+			onSignOutSuccess: function(response) {
+				this.user = response.user;
+				this.recordings = [];
+				this.recordingCount = 0;
+				this.textSamples = [];
+				this.updateCSRFToken(response.csrfToken);
+				this.activateTab('signIn');
+			},
+			onSignInSuccess: function(response) {
+				this.user = response.user;
+				this.recordings = response.recordings;
+				this.recordingCount = response.recordingCount;
+				this.textSamples = response.textSamples;
+				this.updateCSRFToken(response.csrfToken);
+				this.activateTab('newRecording');
+			},
+			onUpdateUserSuccess: function(response) {
+				this.updateCSRFToken(response.csrfToken);
+			},
+			onNewRecordingSuccess: function(response) {
+				this.newRecordingResults[response.newRecordingResultsIndex].score = response.recording.score;
+
+				// Don't accept recordings from a request that was made before the most recent request.
+				if (response.ts < this.lastGetRecordingsTs) return;
+				this.recordingCount = response.recordingCount;
+				this.recordings = response.recordings;
+			},
+			onGetNewTextSampleSuccess: function(response) {
+				// Don't accept text samples from a request that was made before the most recent request.
+				if (response.ts < this.lastGetTextSamplesTs) return;
+				this.lastGetTextSamplesTs = response.ts;
+				this.textSamples = response.textSamples;
+			},
+			onGetRecordingSuccess: function(response) {
+				// Don't accept recordings from a request that was made before the most recent request.
+				if (response.ts < this.lastGetRecordingsTs) return;
+				this.lastGetRecordingsTs = response.ts;
+				this.recordings = response.recordings;
+				this.pageNumberAfterGetRecordings = response.pageNumberAfterGetRecordings;
+			},
+			onTextSamplesImportSuccess: function(response) {
+				this.addSuccess('Text samples imported.');
+
+				// Don't accept recordings from a request that was made before the most recent request.
+				if (response.ts < this.lastGetTextSamplesTs) return;
+				this.textSamples = response.textSamples;
+			},
+			reportDone: function(error) {
+				this.reports.splice(this.reports.indexOf(error), 1);
+			},
+			addError: function(error) {
+				this.addReport(error, 'error');
+			},
+			addSuccess: function(success) {
+				this.addReport(success, 'success');
+			},
+			addReport: function(value, type) {
+				let report = {
+					value: value,
+					type: type,
+					done: false
+				};
+				this.reports.push(report);
+				setTimeout(() => {
+					report.done = true;
+					if (this.reports.indexOf(report) == this.reports.length - 1) this.reports = [];
+				}, 6500);
+			},
+			updateTs: function(prop) {
+				this[prop] = this.unixNow();
+			},
+			unixNow: function() {
+				return Math.floor(Date.now() / 1000);
+			}
+		}
+	});
+	</script>
+</body>

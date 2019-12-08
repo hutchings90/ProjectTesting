@@ -1,0 +1,236 @@
+#speech-therapy-app {
+	min-width: 900px;
+}
+
+#banner {
+	margin-bottom: 20px;
+}
+
+#banner > strong {
+	font-size: 32px;
+	margin: 0 20px;
+}
+
+#tab-headers {
+	display: inline-block;
+	font-size: 0;
+	padding: 0;
+	float: right;
+}
+
+#tab-headers li {
+	display: inline-block;
+	text-align: center;
+	color: black;
+	padding: 3px;
+	font-size: initial;
+	cursor: pointer;
+	border-radius: 5px;
+	margin-right: 5px;
+	border: 1px solid;
+	padding-left: 20px;
+	padding-right: 20px;
+}
+
+#tab-headers li.active {
+	color: white;
+	background: black;
+	border-color: black;
+}
+
+#tab-headers li.disabled {
+	cursor: initial;
+}
+
+.reports {
+	position: absolute;
+	bottom: 0;
+	width: 100%;
+}
+
+.reports .report-container {
+	text-align: center;
+	margin-bottom: 5px;
+}
+
+.reports .report-container .report {
+	display: inline-block;
+	padding: 10px;
+	color: white;
+	width: 300px;
+	animation: fadeout 1.5s linear 5s forwards;
+}
+
+.reports .report-container .report.error {
+	background: red;
+}
+
+.reports .report-container .report.success {
+	background: green;
+}
+
+#tab-content {
+	text-align: center;
+}
+
+#tab-content > div:not(.admin-wrapper) {
+	display: inline-block;
+}
+
+#tab-content .admin-wrapper {
+	margin-top: 20px;
+}
+
+.new-recording-prompt {
+	display: inline-block;
+	margin-bottom: 10px;
+}
+
+.new-recording-data {
+	margin-top: 10px;
+}
+
+.new-recording-result-interpretation {
+	text-align: left;
+}
+
+.new-recording-result-header {
+	margin-bottom: 5px;
+}
+
+.extra-links > a {
+	cursor: pointer;
+	font-size: 14px;
+	text-decoration: underline;
+}
+
+.profile-form-notes {
+	width: 200px;
+	display: inline-block;
+}
+
+.left {
+	float: left;
+}
+
+.right {
+	float: right;
+}
+
+.required {
+	color: red;
+}
+
+.hide {
+	display: none;
+}
+
+.page-marker {
+	display: inline-block;
+	border: 1px solid black;
+	border-radius: 2px;
+	padding: 3px 5px;
+	cursor: pointer;
+	min-width: 44px;
+}
+
+.page-marker:not(:last-child) {
+	margin-right: 5px;
+}
+
+.page-marker.active {
+	background: black;
+	color: white;
+}
+
+.recordings-table  {
+	display: inline-block;
+	border-collapse: collapse;
+	max-width: 100%;
+}
+
+.recordings-table thead {
+	border-bottom: 1px solid black;
+}
+
+.recordings-table tbody tr:not(:last-child) {
+	border-bottom: 1px dashed black;
+}
+
+.recordings-table tbody tr:last-child {
+	border-bottom: 1px solid black;
+}
+
+.recordings-table thead tr th:not(:first-child) {
+	text-align: left;
+	border-left: 1px solid black;
+	padding: 0 3px;
+}
+
+.recordings-table tbody tr:hover {
+	background-color: #ddd;
+}
+
+.recordings-table tbody tr td {
+	padding: 5 5px;
+}
+
+.recordings-table tbody tr td.audio-controls {
+	text-align: center;
+	width: 30px;
+}
+
+.recordings-table tbody tr td.text-sample-cell {
+	text-align: left;
+	padding-right: 10px;
+}
+
+.checkbox-button {
+	cursor: pointer;
+}
+
+input[type='checkbox'].button, input[type='radio'].button {
+	display: none;
+}
+
+.total-page-report {
+	margin: 5px 0;
+}
+
+.recordings-page-input-container {
+	margin-bottom: 10px;
+}
+
+.recordings-page-input-container input {
+	width: 50px;
+}
+
+body {
+	margin: 10px;
+}
+
+form {
+	display: inline-block;
+	background-color: #eeeeee;
+	border: 1px solid black;
+	border-radius: 5px;
+	padding: 20px;
+}
+
+form > div {
+	text-align: left;
+	margin-bottom: 20px;
+}
+
+canvas {
+	background: black;
+	width: 300px;
+	height: 100px;
+	margin-bottom: 20px;
+}
+
+@keyframes fadeout {
+	to {
+		opacity: 0;
+	}
+}
